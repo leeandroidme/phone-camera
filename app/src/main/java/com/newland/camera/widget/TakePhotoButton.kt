@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import androidx.annotation.RequiresApi
 import com.newland.camera.R
+import com.newland.camera.common.TakeOptionConstant
 import com.newland.camera.utils.ResourceUtils
 import kotlin.properties.Delegates
 
@@ -20,18 +21,14 @@ import kotlin.properties.Delegates
 class TakePhotoButton @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : androidx.appcompat.widget.AppCompatImageButton(context, attrs, defStyleAttr) {
-    companion object {
-        val TAKE_PHOTO: Int = 1
 
-    }
-
-    var type = TAKE_PHOTO
+    var type: Int = TakeOptionConstant.TAKE_PHOTO
     private var prePress = false
     private var paint = Paint(Paint.ANTI_ALIAS_FLAG and Paint.DITHER_FLAG)
     var takeColor: Int
-    private var innnerRadius = 0.0f
-    private var maxInnerRadius = 0.0f
-    private var strokeWidth = 0.0f
+    private var innerRadius = 0.0f
+    private var minInnerRadius = 0.0f
+    private var radius = 0.0f
 
     init {
         takeColor = ResourceUtils.getColor(context, R.color.white)
@@ -42,32 +39,58 @@ class TakePhotoButton @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         var strokeWidth = measuredWidth * 0.08f
         paint.strokeWidth = strokeWidth
-        maxInnerRadius = (measuredWidth - strokeWidth * 1.5f)
-        innnerRadius = maxInnerRadius * 0.8f
+        var maxInnerRadius = (measuredWidth - strokeWidth * 1.5f)
+        innerRadius = maxInnerRadius * 0.85f
+        minInnerRadius = maxInnerRadius * 0.75f
+        radius = innerRadius
     }
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         var result = super.onTouchEvent(event)
+        when (type) {
+            TakeOptionConstant.TAKE_PHOTO -> onTouchTakePhoto(event)
+            TakeOptionConstant.SEQUARE -> onTouchTakePhoto(event)
+            TakeOptionConstant.FULL -> onTouchTakePhoto(event)
+        }
+
         if ((isPressed && !prePress) || (!isPressed && prePress)) {
 
         }
-        return result
+        return true
+    }
+
+    private fun onTouchTakePhoto(event: MotionEvent?) {
+        when (event?.action) {
+            MotionEvent.ACTION_DOWN ->{
+                radius = minInnerRadius
+                postInvalidate()
+            }
+            MotionEvent.ACTION_CANCEL->{
+                radius = innerRadius
+                postInvalidate()
+            }
+            MotionEvent.ACTION_UP -> {
+                radius = innerRadius
+                postInvalidate()
+            }
+        }
+
     }
 
     override fun onDraw(canvas: Canvas?) {
         canvas?.also { canvas ->
             when (type) {
-                TAKE_PHOTO -> if (isPressed) {
+                TakeOptionConstant.TAKE_PHOTO -> if (isPressed) {
 
                 } else {
-                    var left = (measuredWidth - innnerRadius) / 2
-                    var top = (measuredHeight - innnerRadius) / 2
+                    var left = (measuredWidth - radius) / 2
+                    var top = (measuredHeight - radius) / 2
                     paint.style = Paint.Style.FILL
                     canvas.drawOval(
                         left,
                         top,
-                        left + innnerRadius,
-                        top + innnerRadius,
+                        left + radius,
+                        top + radius,
                         paint
                     )
 

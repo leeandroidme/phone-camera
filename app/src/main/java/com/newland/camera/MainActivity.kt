@@ -7,6 +7,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.chad.library.adapter.base.BaseQuickAdapter
 import com.chad.library.adapter.base.listener.OnItemClickListener
 import com.newland.camera.common.TakeOptionConstant
+import com.newland.camera.widget.TakePhotoButton
 import com.newland.camera.widget.center.CenterItemDecoration
 import com.newland.camera.widget.center.CenterLayoutManager
 import com.newland.camera.widget.center.CenterRecyclerView
@@ -14,6 +15,7 @@ import com.newland.ui.adapter.MenuAdapter
 
 class MainActivity : AppCompatActivity() {
     private val indicatorTake: CenterRecyclerView by lazy { findViewById(R.id.indicator_take) }
+    private val takePhotoBtn: TakePhotoButton by lazy { findViewById(R.id.btn_takephoto) }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -38,9 +40,10 @@ class MainActivity : AppCompatActivity() {
         indicatorTake.layoutManager = centerLayoutManager
         indicatorTake.addItemDecoration(centerItemDecoration)
         indicatorTake.adapter = adapter
-        for (i in datas.indices){
-            if(datas[i].flag==TakeOptionConstant.TAKE_PHOTO){
+        for (i in datas.indices) {
+            if (datas[i].flag == TakeOptionConstant.TAKE_PHOTO) {
                 indicatorTake.setInitPosition(i)
+                takePhotoBtn.type = datas[i].flag
                 break
             }
         }

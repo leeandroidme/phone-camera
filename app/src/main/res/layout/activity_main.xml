@@ -34,6 +34,7 @@
             android:src="@drawable/ic_store_face"/>
 
         <com.newland.camera.widget.TakePhotoButton
+            android:id="@+id/btn_takephoto"
             android:layout_width="@dimen/dimen_take_phone"
             android:layout_height="@dimen/dimen_take_phone"
             android:layout_centerInParent="true" />
