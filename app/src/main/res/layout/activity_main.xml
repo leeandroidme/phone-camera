@@ -6,12 +6,21 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <com.newland.camera.widget.center.CenterRecyclerView
+        android:id="@+id/indicator_take"
+        android:layout_marginLeft="@dimen/app_margin_bound"
+        android:layout_marginRight="@dimen/app_margin_bound"
+        android:layout_width="match_parent"
+        app:layout_constraintBottom_toTopOf="@+id/layout_bottom"
+        android:layout_height="40dp"/>
     <RelativeLayout
+        android:id="@+id/layout_bottom"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/black"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:layout_marginBottom="15dp"
         android:layout_marginLeft="@dimen/app_margin_bound"
         android:layout_marginRight="@dimen/app_margin_bound"
         app:layout_constraintBottom_toBottomOf="parent">

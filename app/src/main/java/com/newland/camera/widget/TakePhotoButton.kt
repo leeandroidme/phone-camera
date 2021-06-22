@@ -29,11 +29,21 @@ class TakePhotoButton @JvmOverloads constructor(
     private var prePress = false
     private var paint = Paint(Paint.ANTI_ALIAS_FLAG and Paint.DITHER_FLAG)
     var takeColor: Int
+    private var innnerRadius = 0.0f
+    private var maxInnerRadius = 0.0f
+    private var strokeWidth = 0.0f
 
     init {
         takeColor = ResourceUtils.getColor(context, R.color.white)
         paint.setColor(takeColor)
-        paint.strokeWidth=20.0f
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        var strokeWidth = measuredWidth * 0.08f
+        paint.strokeWidth = strokeWidth
+        maxInnerRadius = (measuredWidth - strokeWidth * 1.5f)
+        innnerRadius = maxInnerRadius * 0.8f
     }
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
@@ -50,23 +60,23 @@ class TakePhotoButton @JvmOverloads constructor(
                 TAKE_PHOTO -> if (isPressed) {
 
                 } else {
-                    var innerCorner = measuredWidth * 0.6f
-                    var left = (measuredWidth - innerCorner) / 2
-                    var top = (measuredHeight - innerCorner) / 2
+                    var left = (measuredWidth - innnerRadius) / 2
+                    var top = (measuredHeight - innnerRadius) / 2
                     paint.style = Paint.Style.FILL
                     canvas.drawOval(
                         left,
                         top,
-                        left + innerCorner,
-                        top + innerCorner,
+                        left + innnerRadius,
+                        top + innnerRadius,
                         paint
                     )
+
                     paint.style = Paint.Style.STROKE
+                    var strokeHalf = paint.strokeWidth / 2
                     canvas.drawRoundRect(
-                        5f,
-                        5f,
-                        measuredWidth.toFloat()-5,
-                        measuredHeight.toFloat()-5,
+                        strokeHalf, strokeHalf,
+                        measuredWidth.toFloat() - strokeHalf,
+                        measuredHeight.toFloat() - strokeHalf,
                         measuredWidth / 2.0f,
                         measuredHeight / 2.0f,
                         paint
