@@ -2,25 +2,77 @@ package com.newland.camera.widget
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Paint
+import android.os.Build
 import android.util.AttributeSet
 import android.view.MotionEvent
+import androidx.annotation.RequiresApi
+import com.newland.camera.R
+import com.newland.camera.utils.ResourceUtils
+import kotlin.properties.Delegates
 
 /**
  * @author: leellun
  * @data: 22/6/2021.
  *
  */
+@RequiresApi(Build.VERSION_CODES.M)
 class TakePhotoButton @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : androidx.appcompat.widget.AppCompatImageButton(context, attrs, defStyleAttr) {
-    init {
+    companion object {
+        val TAKE_PHOTO: Int = 1
 
+    }
+
+    var type = TAKE_PHOTO
+    private var prePress = false
+    private var paint = Paint(Paint.ANTI_ALIAS_FLAG and Paint.DITHER_FLAG)
+    var takeColor: Int
+
+    init {
+        takeColor = ResourceUtils.getColor(context, R.color.white)
+        paint.setColor(takeColor)
+        paint.strokeWidth=20.0f
     }
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
-        return super.onTouchEvent(event)
+        var result = super.onTouchEvent(event)
+        if ((isPressed && !prePress) || (!isPressed && prePress)) {
+
+        }
+        return result
     }
+
     override fun onDraw(canvas: Canvas?) {
-        super.onDraw(canvas)
+        canvas?.also { canvas ->
+            when (type) {
+                TAKE_PHOTO -> if (isPressed) {
+
+                } else {
+                    var innerCorner = measuredWidth * 0.6f
+                    var left = (measuredWidth - innerCorner) / 2
+                    var top = (measuredHeight - innerCorner) / 2
+                    paint.style = Paint.Style.FILL
+                    canvas.drawOval(
+                        left,
+                        top,
+                        left + innerCorner,
+                        top + innerCorner,
+                        paint
+                    )
+                    paint.style = Paint.Style.STROKE
+                    canvas.drawRoundRect(
+                        5f,
+                        5f,
+                        measuredWidth.toFloat()-5,
+                        measuredHeight.toFloat()-5,
+                        measuredWidth / 2.0f,
+                        measuredHeight / 2.0f,
+                        paint
+                    )
+                }
+            }
+        }
     }
 }
