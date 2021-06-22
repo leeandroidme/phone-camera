@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/black"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent">
+
+        <ImageView
+            android:id="@+id/icon_adjust"
+            android:layout_width="80dp"
+            android:layout_height="80dip"
+            android:src="@drawable/ic_menu_face"
+            app:tint="@color/white" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/selector_icon_capture_border"
+            app:srcCompat="@drawable/selector_icon_capture" />
+
+        <ImageView
+            android:id="@+id/iv_filter"
+            android:layout_width="44dip"
+            android:layout_height="wrap_content"
+            android:src="@drawable/selector_switch_camera" />
+    </LinearLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>
