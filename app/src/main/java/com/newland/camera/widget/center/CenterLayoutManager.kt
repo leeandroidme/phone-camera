@@ -100,7 +100,7 @@ class CenterLayoutManager : LinearLayoutManager {
             if (targetPosition == 0) {
                 var newViewStart = viewStart + (boxEnd - boxStart) / 2
                 return (boxStart + (boxEnd - boxStart) / 2) - (newViewStart + (viewEnd - newViewStart) / 2)
-            } else if (targetPosition == childCount) {
+            } else if (targetPosition == childCount - 1) {
                 var newViewEnd = viewEnd - (boxEnd - boxStart) / 2
                 return (boxStart + (boxEnd - boxStart) / 2) - (viewStart + (newViewEnd - viewStart) / 2)
             } else {
