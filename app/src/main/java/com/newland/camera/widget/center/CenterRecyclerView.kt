@@ -131,11 +131,6 @@ class CenterRecyclerView : RecyclerView {
         mOnTargetItemListener?.onTargetItem(position, mPrePosition)
     }
 
-    override fun computeScroll() {
-        super.computeScroll()
-
-    }
-
     interface OnTargetItemListener {
         fun onTargetItem(position: Int, prePosition: Int)
     }

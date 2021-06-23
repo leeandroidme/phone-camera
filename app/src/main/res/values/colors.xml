@@ -7,5 +7,6 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="transpant">#00000000</color>
     <color name="color_take_operation_select">#E67E22</color>
 </resources>

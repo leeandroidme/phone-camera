@@ -47,4 +47,9 @@
             android:layout_centerVertical="true"
             android:src="@drawable/selector_switch_camera" />
     </RelativeLayout>
+    <SurfaceView
+        android:id="@+id/surfaceView"
+        android:layout_width="match_parent"
+        android:background="@color/transpant"
+        android:layout_height="match_parent"/>
 </androidx.constraintlayout.widget.ConstraintLayout>
