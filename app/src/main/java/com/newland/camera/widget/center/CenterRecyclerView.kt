@@ -116,6 +116,7 @@ class CenterRecyclerView : RecyclerView {
     }
 
     override fun scrollToPosition(position: Int) {
+        if (mPosition == position) return
         super.scrollToPosition(position)
         mPrePosition = mPosition
         mPosition = position
@@ -123,6 +124,7 @@ class CenterRecyclerView : RecyclerView {
     }
 
     override fun smoothScrollToPosition(position: Int) {
+        if (mPosition == position) return
         super.smoothScrollToPosition(position)
         mPrePosition = mPosition
         mPosition = position

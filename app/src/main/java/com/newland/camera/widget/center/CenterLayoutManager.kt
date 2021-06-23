@@ -8,6 +8,7 @@ import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
+import kotlin.math.max
 
 /**
  * @author: leellun
@@ -80,12 +81,14 @@ class CenterLayoutManager : LinearLayoutManager {
         state: RecyclerView.State?,
         position: Int
     ) {
-        var smoothScroller = CenterSmoothScroller(recyclerView?.context)
+        var smoothScroller =
+            CenterSmoothScroller(recyclerView?.context, recyclerView?.adapter?.itemCount ?: -1)
         smoothScroller.targetPosition = position
         startSmoothScroll(smoothScroller)
     }
 
-    class CenterSmoothScroller(context: Context?) : LinearSmoothScroller(context) {
+    class CenterSmoothScroller(context: Context?, val itemCount: Int) :
+        LinearSmoothScroller(context) {
         override fun calculateSpeedPerPixel(displayMetrics: DisplayMetrics?): Float {
             return 150f / displayMetrics?.densityDpi!!
         }
@@ -100,7 +103,7 @@ class CenterLayoutManager : LinearLayoutManager {
             if (targetPosition == 0) {
                 var newViewStart = viewStart + (boxEnd - boxStart) / 2
                 return (boxStart + (boxEnd - boxStart) / 2) - (newViewStart + (viewEnd - newViewStart) / 2)
-            } else if (targetPosition == childCount - 1) {
+            } else if (targetPosition == max(childCount, itemCount) - 1) {
                 var newViewEnd = viewEnd - (boxEnd - boxStart) / 2
                 return (boxStart + (boxEnd - boxStart) / 2) - (viewStart + (newViewEnd - viewStart) / 2)
             } else {
