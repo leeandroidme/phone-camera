@@ -4,31 +4,42 @@ import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.media.ImageReader
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.MediaStore
 import android.util.Log
+import android.util.SparseIntArray
+import android.view.Surface
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.*
 import com.chad.library.adapter.base.BaseQuickAdapter
 import com.chad.library.adapter.base.listener.OnItemClickListener
 import com.newland.camera.common.TakeOptionConstant
+import com.newland.camera.manager.FileManager
 import com.newland.camera.utils.Camera2Utils
+import com.newland.camera.utils.GlideUtils
 import com.newland.camera.widget.CameraConstraintLayout
 import com.newland.camera.widget.CameraConstraintLayout.OnSwitchListener
 import com.newland.camera.widget.TakePhotoButton
@@ -36,8 +47,22 @@ import com.newland.camera.widget.center.CenterItemDecoration
 import com.newland.camera.widget.center.CenterLayoutManager
 import com.newland.camera.widget.center.CenterRecyclerView
 import com.newland.ui.adapter.MenuAdapter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
+    companion object{
+        val ORIENTATIONS:SparseIntArray= SparseIntArray()
+        init {
+                ORIENTATIONS.append(Surface.ROTATION_0, 90)
+                ORIENTATIONS.append(Surface.ROTATION_90, 0)
+                ORIENTATIONS.append(Surface.ROTATION_180, 270)
+                ORIENTATIONS.append(Surface.ROTATION_270, 180)
+        }
+    }
     private val indicatorTake: CenterRecyclerView by lazy { findViewById(R.id.indicator_take) }
     private val takePhotoBtn: TakePhotoButton by lazy { findViewById(R.id.btn_takephoto) }
     private val bottomLayout: View by lazy { findViewById(R.id.layout_bottom) }
@@ -53,11 +78,13 @@ class MainActivity : AppCompatActivity() {
     private val closeTimerTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_close) }
     private val timer3sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_3s) }
     private val timer10sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_10s) }
+    private val adjustIv: AppCompatImageView by lazy { findViewById(R.id.icon_adjust) }
 
     lateinit var mCameraManager: CameraManager
     var mCameraDevice: CameraDevice? = null
     lateinit var mCameraId: String
     var mCameraCaptureSession: CameraCaptureSession? = null
+    lateinit var mImageReader: ImageReader
 
     lateinit var mMainHandler: Handler
     var childHandler: Handler? = null
@@ -101,9 +128,10 @@ class MainActivity : AppCompatActivity() {
                 closeTimerTv.visibility = View.GONE
                 timer3sTv.visibility = View.GONE
                 timer10sTv.visibility = View.GONE
-                var targetX: Float = (((timerIb.parent as ViewGroup).width - timerIb.width) / 2).toFloat()
+                var targetX: Float =
+                    (((timerIb.parent as ViewGroup).width - timerIb.width) / 2).toFloat()
                 var animator = ObjectAnimator.ofFloat(timerIb, "x", timerIb.x, targetX)
-                animator.duration = 800
+                animator.duration = 500
                 animator.addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator?) {
                         flashIb.visibility = View.VISIBLE
@@ -137,7 +165,11 @@ class MainActivity : AppCompatActivity() {
         mMainHandler = Handler(getMainLooper());
         mCameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
         mCameraId = Camera2Utils.getFirstCameraIdFacing(mCameraManager)
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             return
         }
         mCameraManager.openCamera(mCameraId, mStateCallback, mMainHandler)
@@ -147,9 +179,9 @@ class MainActivity : AppCompatActivity() {
         surfaceView.viewTreeObserver.addOnGlobalLayoutListener(object : OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 surfaceView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                var parent = surfaceView.parent as ViewGroup
-                surfaceView.layoutParams.height = (bottomLayout.y - topLayout.y - topLayout.height).toInt()
-//                initCamera()
+                surfaceView.layoutParams.height =
+                    (bottomLayout.y - topLayout.y - topLayout.height).toInt()
+                initCamera()
             }
         })
     }
@@ -168,7 +200,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         indicatorTake.layoutManager =
-                CenterLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+            CenterLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         indicatorTake.addItemDecoration(CenterItemDecoration())
         indicatorTake.adapter = adapter
         for (i in datas.indices) {
@@ -186,21 +218,63 @@ class MainActivity : AppCompatActivity() {
             override fun onNext() {
                 indicatorTake.smoothScrollToPosition(indicatorTake.mPosition + 1)
             }
-
+        }
+        takePhotoBtn.setOnClickListener {
+            takePhoto()
         }
     }
-
+    fun takePhoto(){
+        mCameraDevice?.apply {
+            val captureRequestBuild=createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+            captureRequestBuild.addTarget(mImageReader.surface)
+            captureRequestBuild.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+            captureRequestBuild.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
+            var rotation:Int=this@MainActivity.windowManager.defaultDisplay.rotation
+            captureRequestBuild.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS[rotation])
+            mCameraCaptureSession?.capture(captureRequestBuild.build(),null,childHandler)
+        }
+    }
     fun takePreview() {
+        var width = 640
+        var height = 480
+        mImageReader =
+            ImageReader.newInstance(640, 480, ImageFormat.JPEG, 10)
+        mImageReader.setOnImageAvailableListener({ reader ->
+            reader?.also { reader ->
+                var image=reader.acquireNextImage()
+                var buffer=image.planes[0].buffer
+                var bytes=buffer.remaining().let { ByteArray(it) }
+                buffer.get(bytes)
+                var file=FileManager.instance.getPicture("${System.currentTimeMillis()}.jpg")
+                var fos=FileOutputStream(file)
+                fos.write(bytes)
+                fos.flush()
+                fos.close()
+                var intent=Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                var uri=Uri.fromFile(File(file))
+                intent.setData(uri)
+                sendBroadcast(intent)
+                lifecycleScope.launch(Dispatchers.Main) {
+                    GlideUtils.loadImage(this@MainActivity,file,adjustIv)
+                }
+            }
+        }, childHandler)
         var previewSurface = surfaceView.holder.surface
-        var targets = listOf(previewSurface)
+        var targets = listOf(previewSurface,mImageReader.surface)
         mCameraDevice?.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) {
                 mCameraDevice?.apply {
                     mCameraCaptureSession = session
                     val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                     captureRequest.addTarget(previewSurface)
-                    captureRequest.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                    captureRequest.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
+                    captureRequest.set(
+                        CaptureRequest.CONTROL_AF_MODE,
+                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                    )
+                    captureRequest.set(
+                        CaptureRequest.CONTROL_AE_MODE,
+                        CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+                    )
                     session.setRepeatingRequest(captureRequest.build(), null, childHandler)
                 }
             }
