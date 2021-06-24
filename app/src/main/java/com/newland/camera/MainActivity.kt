@@ -1,13 +1,17 @@
 package com.newland.camera
 
+import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
-import android.content.Intent
+import android.content.pm.PackageManager
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
-import android.opengl.Visibility
+import android.hardware.camera2.CaptureRequest
 import android.os.Bundle
+import android.os.Handler
+import android.os.HandlerThread
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -15,10 +19,12 @@ import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatTextView
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.chad.library.adapter.base.BaseQuickAdapter
 import com.chad.library.adapter.base.listener.OnItemClickListener
 import com.newland.camera.common.TakeOptionConstant
+import com.newland.camera.utils.Camera2Utils
 import com.newland.camera.widget.CameraConstraintLayout
 import com.newland.camera.widget.CameraConstraintLayout.OnSwitchListener
 import com.newland.camera.widget.TakePhotoButton
@@ -43,6 +49,29 @@ class MainActivity : AppCompatActivity() {
     private val closeTimerTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_close) }
     private val timer3sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_3s) }
     private val timer10sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_10s) }
+
+    lateinit var mCameraManager: CameraManager
+    var mCameraDevice: CameraDevice? = null
+    lateinit var mCameraId: String
+    var mCameraCaptureSession: CameraCaptureSession? = null
+
+    lateinit var mMainHandler: Handler
+    var childHandler: Handler? = null
+    var childHandlerThread: HandlerThread? = null
+    var mStateCallback = object : CameraDevice.StateCallback() {
+        override fun onOpened(cameraDevice: CameraDevice) {
+            mCameraDevice = cameraDevice
+            takePreview()
+        }
+
+        override fun onDisconnected(cameraDevice: CameraDevice) {
+        }
+
+        override fun onError(cameraDevice: CameraDevice, p1: Int) {
+        }
+
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -93,6 +122,21 @@ class MainActivity : AppCompatActivity() {
                 animator.start()
             }
         }
+
+    }
+
+    private fun initCamera() {
+        childHandlerThread = HandlerThread("Cameraphone").apply {
+            start()
+            childHandler = Handler(looper)
+        }
+        mMainHandler = Handler(getMainLooper());
+        mCameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
+        mCameraId = Camera2Utils.getFirstCameraIdFacing(mCameraManager)
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+        mCameraManager.openCamera(mCameraId, mStateCallback, mMainHandler)
     }
 
     private fun initSurfaceView() {
@@ -100,8 +144,8 @@ class MainActivity : AppCompatActivity() {
             override fun onGlobalLayout() {
                 surfaceView.viewTreeObserver.removeOnGlobalLayoutListener(this)
                 var parent = surfaceView.parent as ViewGroup
-                surfaceView.layoutParams.height =
-                        parent.height - topLayout.height - bottomLayout.height
+                surfaceView.layoutParams.height = (bottomLayout.y - topLayout.y - topLayout.height).toInt()
+//                initCamera()
             }
         })
     }
@@ -140,5 +184,27 @@ class MainActivity : AppCompatActivity() {
             }
 
         }
+    }
+
+    fun takePreview() {
+        var previewSurface = surfaceView.holder.surface
+        var targets = listOf(previewSurface)
+        mCameraDevice?.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
+            override fun onConfigured(session: CameraCaptureSession) {
+                mCameraDevice?.apply {
+                    mCameraCaptureSession = session
+                    val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                    captureRequest.addTarget(previewSurface)
+                    captureRequest.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                    captureRequest.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
+                    session.setRepeatingRequest(captureRequest.build(), null, childHandler)
+                }
+            }
+
+            override fun onConfigureFailed(session: CameraCaptureSession) {
+            }
+
+        }, childHandler)
+
     }
 }
