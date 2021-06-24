@@ -10,4 +10,5 @@
     <color name="transpant">#00000000</color>
     <color name="color_take_operation_select">#E67E22</color>
     <color name="color_theme_color">@color/black</color>
+    <color name="color_text">#e2FFFFFF</color>
 </resources>
