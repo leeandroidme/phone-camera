@@ -17,7 +17,6 @@ import kotlin.math.max
  */
 class CenterLayoutManager : LinearLayoutManager {
     var mPendingScrollPosition = RecyclerView.NO_POSITION
-    var mPrePendingScrollPosition = RecyclerView.NO_POSITION
     private var recyclerView: RecyclerView? = null
 
     constructor(context: Context?) : super(context)
@@ -49,31 +48,27 @@ class CenterLayoutManager : LinearLayoutManager {
      */
     override fun onLayoutCompleted(state: RecyclerView.State?) {
         super.onLayoutCompleted(state)
-        if (mPrePendingScrollPosition != RecyclerView.NO_POSITION) {
+        if (mPendingScrollPosition != RecyclerView.NO_POSITION) {
             for (i in childCount - 1 downTo 0) {
-                if (mPrePendingScrollPosition == RecyclerView.NO_POSITION) break
+                if (mPendingScrollPosition == RecyclerView.NO_POSITION) break
                 recyclerView?.apply {
                     var view: View = getChildAt(i)
                     var adapterPosition = getChildAdapterPosition(view)
-                    if (adapterPosition == mPrePendingScrollPosition) {
+                    if (adapterPosition == mPendingScrollPosition) {
+                        mPendingScrollPosition = RecyclerView.NO_POSITION
                         scrollBy(
                             (view.left - scrollX) - (measuredWidth - view.measuredWidth) / 2,
                             0
                         )
-                        mPrePendingScrollPosition = RecyclerView.NO_POSITION
                     }
                 }
             }
-        } else if (mPendingScrollPosition != RecyclerView.NO_POSITION) {
-            super.scrollToPosition(mPendingScrollPosition)
-            mPrePendingScrollPosition = mPendingScrollPosition
-            mPendingScrollPosition = RecyclerView.NO_POSITION
         }
     }
 
     override fun scrollToPosition(position: Int) {
         mPendingScrollPosition = position
-        requestLayout()
+        super.scrollToPosition(position)
     }
 
     override fun smoothScrollToPosition(
@@ -92,7 +87,6 @@ class CenterLayoutManager : LinearLayoutManager {
         override fun calculateSpeedPerPixel(displayMetrics: DisplayMetrics?): Float {
             return 150f / displayMetrics?.densityDpi!!
         }
-
         override fun calculateDtToFit(
             viewStart: Int,
             viewEnd: Int,
