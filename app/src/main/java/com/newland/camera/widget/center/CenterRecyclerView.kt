@@ -19,7 +19,7 @@ class CenterRecyclerView : RecyclerView {
     private var mTouchSlop = 0
     private var mScrollPointerId = 0
     private var mPrePosition = 0
-    private var mPosition = 0
+    var mPosition = 0
     private var mInterceptor = false
     var mOnTargetItemListener: OnTargetItemListener? = null
 
@@ -116,6 +116,7 @@ class CenterRecyclerView : RecyclerView {
     }
 
     override fun scrollToPosition(position: Int) {
+        if (position < 0 || position >= adapter?.itemCount ?: 0) return
         if (mPosition == position) return
         super.scrollToPosition(position)
         mPrePosition = mPosition
@@ -124,6 +125,7 @@ class CenterRecyclerView : RecyclerView {
     }
 
     override fun smoothScrollToPosition(position: Int) {
+        if (position < 0 || position >= adapter?.itemCount ?: 0) return
         if (mPosition == position) return
         super.smoothScrollToPosition(position)
         mPrePosition = mPosition
