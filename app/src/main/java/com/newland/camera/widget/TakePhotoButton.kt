@@ -80,9 +80,7 @@ class TakePhotoButton @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas?) {
         canvas?.also { canvas ->
             when (type) {
-                TakeOptionConstant.TAKE_PHOTO -> if (isPressed) {
-
-                } else {
+                TakeOptionConstant.TAKE_PHOTO -> {
                     var left = (measuredWidth - radius) / 2
                     var top = (measuredHeight - radius) / 2
                     paint.style = Paint.Style.FILL
