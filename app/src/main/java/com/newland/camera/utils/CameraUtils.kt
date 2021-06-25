@@ -18,7 +18,7 @@ import kotlin.math.min
  *
  */
 object CameraUtils {
-    val SIZE_1080P = Size(1920, 1080)
+    val SIZE_1080P = Size(1080, 1920)
     fun isSupportCamera(cameraManager: CameraManager): Boolean {
         var cameraIds = cameraManager.cameraIdList
         if (cameraIds.isEmpty()) return false
@@ -35,7 +35,7 @@ object CameraUtils {
 
     fun getFirstCameraIdFacing(
         cameraManager: CameraManager,
-        facing: Int = CameraMetadata.LENS_FACING_FRONT
+        facing: Int = CameraMetadata.LENS_FACING_BACK
     ): String {
         var cameraIds = cameraManager.cameraIdList.filter {
             var cameraCharacteristics = cameraManager.getCameraCharacteristics(it)
@@ -92,7 +92,6 @@ object CameraUtils {
         val maxWidth = min(min(outPoint.x, outPoint.y), SIZE_1080P.width)
         val maxHeight = min(max(outPoint.x, outPoint.y), SIZE_1080P.height)
 
-        var ratio = (height + 0.5f) / width
         val configurationMap = cameraManager.getCameraCharacteristics(cameraId)
             .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
         if (format == null) {
@@ -105,8 +104,8 @@ object CameraUtils {
                 configurationMap.getOutputSizes(targetClass)
             else configurationMap.getOutputSizes(format)
         return allSizes.sortedWith(compareBy {
-            abs((it.height + 0.5f) / it.width - ratio)
-        }).first {
+            it.width*it.height
+        }).reversed().first {
             it.width <= maxWidth && it.height <= maxHeight
         }
     }
