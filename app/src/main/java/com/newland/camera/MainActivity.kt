@@ -4,13 +4,12 @@ import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.*
 import android.media.ImageReader
 import android.net.Uri
 import android.os.Build
@@ -20,25 +19,25 @@ import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
 import android.util.SparseIntArray
-import android.view.Surface
-import android.view.SurfaceView
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.view.ViewTreeObserver.OnGlobalLayoutListener
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.appcompat.widget.AppCompatTextView
 import androidx.core.app.ActivityCompat
+import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.*
 import com.chad.library.adapter.base.BaseQuickAdapter
 import com.chad.library.adapter.base.listener.OnItemClickListener
+import com.newland.camera.beans.TakeOperation
 import com.newland.camera.common.TakeOptionConstant
 import com.newland.camera.manager.FileManager
 import com.newland.camera.utils.Camera2Utils
+import com.newland.camera.utils.CameraUtils
 import com.newland.camera.utils.GlideUtils
 import com.newland.camera.widget.CameraConstraintLayout
 import com.newland.camera.widget.CameraConstraintLayout.OnSwitchListener
@@ -54,15 +53,17 @@ import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
-    companion object{
-        val ORIENTATIONS:SparseIntArray= SparseIntArray()
+    companion object {
+        val ORIENTATIONS: SparseIntArray = SparseIntArray()
+
         init {
-                ORIENTATIONS.append(Surface.ROTATION_0, 90)
-                ORIENTATIONS.append(Surface.ROTATION_90, 0)
-                ORIENTATIONS.append(Surface.ROTATION_180, 270)
-                ORIENTATIONS.append(Surface.ROTATION_270, 180)
+            ORIENTATIONS.append(Surface.ROTATION_0, 90)
+            ORIENTATIONS.append(Surface.ROTATION_90, 0)
+            ORIENTATIONS.append(Surface.ROTATION_180, 270)
+            ORIENTATIONS.append(Surface.ROTATION_270, 180)
         }
     }
+
     private val indicatorTake: CenterRecyclerView by lazy { findViewById(R.id.indicator_take) }
     private val takePhotoBtn: TakePhotoButton by lazy { findViewById(R.id.btn_takephoto) }
     private val bottomLayout: View by lazy { findViewById(R.id.layout_bottom) }
@@ -79,16 +80,33 @@ class MainActivity : AppCompatActivity() {
     private val timer3sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_3s) }
     private val timer10sTv: AppCompatTextView by lazy { findViewById(R.id.tv_timer_10s) }
     private val adjustIv: AppCompatImageView by lazy { findViewById(R.id.icon_adjust) }
+    private val overlay: View by lazy { findViewById(R.id.overlay) }
 
-    lateinit var mCameraManager: CameraManager
+    private val animationTask: Runnable by lazy {
+        Runnable {
+            overlay.visibility = View.VISIBLE
+            overlay.background = Color.argb(150, 255, 255, 255).toDrawable()
+            overlay.postDelayed({
+                overlay.background = null
+                overlay.visibility = View.GONE
+            }, 50)
+        }
+    }
+
+    private val mCameraManager: CameraManager by lazy { getSystemService(Context.CAMERA_SERVICE) as CameraManager }
     var mCameraDevice: CameraDevice? = null
     lateinit var mCameraId: String
     var mCameraCaptureSession: CameraCaptureSession? = null
     lateinit var mImageReader: ImageReader
 
-    lateinit var mMainHandler: Handler
-    var childHandler: Handler? = null
-    var childHandlerThread: HandlerThread? = null
+    private val mMainHandler by lazy { Handler(getMainLooper()) }
+    private val childHandlerThread = HandlerThread("Cameraphone").apply {
+        start()
+    }
+    private val childHandler: Handler = Handler(childHandlerThread.looper)
+    private var isDisconnectedCamera = false
+    private var isResume = false
+    private var takeOperation: TakeOperation? = null
     var mStateCallback = object : CameraDevice.StateCallback() {
         override fun onOpened(cameraDevice: CameraDevice) {
             mCameraDevice = cameraDevice
@@ -96,6 +114,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onDisconnected(cameraDevice: CameraDevice) {
+            if (isResume) {
+                resetCamera()
+            }
         }
 
         override fun onError(cameraDevice: CameraDevice, p1: Int) {
@@ -105,6 +126,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.activity_main)
         initTakeOperationView()
         initSurfaceView()
@@ -157,14 +179,34 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    private fun initCamera() {
-        childHandlerThread = HandlerThread("Cameraphone").apply {
-            start()
-            childHandler = Handler(looper)
+    override fun onResume() {
+        super.onResume()
+        isResume = true
+        if (isDisconnectedCamera) {
+            resetCamera()
         }
-        mMainHandler = Handler(getMainLooper());
-        mCameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-        mCameraId = Camera2Utils.getFirstCameraIdFacing(mCameraManager)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        isResume = false
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        childHandlerThread?.apply {
+            quitSafely()
+            join()
+        }
+    }
+
+    private fun resetCamera() {
+        stopCamera()
+        initCamera()
+    }
+
+    private fun initCamera() {
+        mCameraId = CameraUtils.getFirstCameraIdFacing(mCameraManager)
         if (ActivityCompat.checkSelfPermission(
                 this,
                 Manifest.permission.CAMERA
@@ -175,15 +217,49 @@ class MainActivity : AppCompatActivity() {
         mCameraManager.openCamera(mCameraId, mStateCallback, mMainHandler)
     }
 
+    private fun stopCamera() {
+        mCameraDevice?.apply {
+            close()
+            mCameraDevice = null
+        }
+    }
+
     private fun initSurfaceView() {
         surfaceView.viewTreeObserver.addOnGlobalLayoutListener(object : OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 surfaceView.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                surfaceView.layoutParams.height =
-                    (bottomLayout.y - topLayout.y - topLayout.height).toInt()
+                adjustSurfaceView()
                 initCamera()
             }
         })
+    }
+
+    private fun adjustSurfaceView() {
+        takeOperation?.also {
+            topLayout.visibility = VISIBLE
+            var layoutParams = surfaceView.layoutParams
+            when (it.flag) {
+                TakeOptionConstant.TAKE_PHOTO -> {
+                    layoutParams.height =
+                        (bottomLayout.y - topLayout.y - topLayout.height).toInt()
+                    bottomLayout.setBackgroundResource(R.color.color_theme_color)
+                }
+                TakeOptionConstant.SEQUARE -> {
+                    layoutParams.height = surfaceView.width
+                    bottomLayout.setBackgroundResource(R.color.color_theme_color)
+                }
+                TakeOptionConstant.FULL -> {
+                    layoutParams.height = LayoutParams.MATCH_PARENT
+                    topLayout.visibility = GONE
+                    bottomLayout.setBackgroundResource(R.color.color_take_half_transpant)
+                }
+            }
+            surfaceView.layoutParams = layoutParams
+            overlay.layoutParams.also { itt ->
+                itt.height = layoutParams.height
+                overlay.layoutParams = itt
+            }
+        }
     }
 
     private fun initTakeOperationView() {
@@ -197,6 +273,12 @@ class MainActivity : AppCompatActivity() {
         indicatorTake.mOnTargetItemListener = object : CenterRecyclerView.OnTargetItemListener {
             override fun onTargetItem(position: Int, prePosition: Int) {
                 adapter.refreshTakeOperation(position, prePosition)
+                var option = adapter.data[position]
+                if (option.flag != takeOperation?.flag) {
+                    takeOperation = option
+                    adjustSurfaceView()
+                    resetCamera()
+                }
             }
         }
         indicatorTake.layoutManager =
@@ -205,8 +287,9 @@ class MainActivity : AppCompatActivity() {
         indicatorTake.adapter = adapter
         for (i in datas.indices) {
             if (datas[i].flag == TakeOptionConstant.TAKE_PHOTO) {
+                takeOperation = datas[i]
                 indicatorTake.setInitPosition(i)
-                takePhotoBtn.type = datas[i].flag
+                takePhotoBtn.type = takeOperation!!.flag
                 break
             }
         }
@@ -223,44 +306,86 @@ class MainActivity : AppCompatActivity() {
             takePhoto()
         }
     }
-    fun takePhoto(){
+
+    fun takePhoto() {
         mCameraDevice?.apply {
-            val captureRequestBuild=createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+            val captureRequestBuild = createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             captureRequestBuild.addTarget(mImageReader.surface)
-            captureRequestBuild.set(CaptureRequest.CONTROL_AF_MODE,CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-            captureRequestBuild.set(CaptureRequest.CONTROL_AE_MODE,CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH)
-            var rotation:Int=this@MainActivity.windowManager.defaultDisplay.rotation
+            captureRequestBuild.set(
+                CaptureRequest.CONTROL_AF_MODE,
+                CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+            )
+            captureRequestBuild.set(
+                CaptureRequest.CONTROL_AE_MODE,
+                CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+            )
+            var rotation: Int = this@MainActivity.windowManager.defaultDisplay.rotation
             captureRequestBuild.set(CaptureRequest.JPEG_ORIENTATION, ORIENTATIONS[rotation])
-            mCameraCaptureSession?.capture(captureRequestBuild.build(),null,childHandler)
+            mCameraCaptureSession?.capture(
+                captureRequestBuild.build(),
+                object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureStarted(
+                        session: CameraCaptureSession,
+                        request: CaptureRequest,
+                        timestamp: Long,
+                        frameNumber: Long
+                    ) {
+                        surfaceView.post(animationTask)
+                    }
+                },
+                childHandler
+            )
         }
     }
+
     fun takePreview() {
-        var width = 640
-        var height = 480
+        val size = CameraUtils.getOutputSize(
+            surfaceView.display,
+            mCameraManager,
+            mCameraId,
+            surfaceView.measuredWidth,
+            surfaceView.measuredHeight,
+            SurfaceHolder::class.java
+        )
+        surfaceView.holder.setFixedSize(size.width, size.height)
+        val irSize = CameraUtils.getOutputSize(
+            surfaceView.display,
+            mCameraManager,
+            mCameraId,
+            surfaceView.measuredWidth,
+            surfaceView.measuredHeight,
+            ImageReader::class.java,
+            ImageFormat.JPEG
+        )
         mImageReader =
-            ImageReader.newInstance(640, 480, ImageFormat.JPEG, 10)
+            ImageReader.newInstance(irSize.width, irSize.height, ImageFormat.JPEG, 10)
         mImageReader.setOnImageAvailableListener({ reader ->
             reader?.also { reader ->
-                var image=reader.acquireNextImage()
-                var buffer=image.planes[0].buffer
-                var bytes=buffer.remaining().let { ByteArray(it) }
+                var image = reader.acquireNextImage()
+                var buffer = image.planes[0].buffer
+                var bytes = buffer.remaining().let { ByteArray(it) }
                 buffer.get(bytes)
-                var file=FileManager.instance.getPicture("${System.currentTimeMillis()}.jpg")
-                var fos=FileOutputStream(file)
+                var file = FileManager.instance.getPicture("${System.currentTimeMillis()}.jpg")
+                var fos = FileOutputStream(file)
                 fos.write(bytes)
                 fos.flush()
                 fos.close()
-                var intent=Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-                var uri=Uri.fromFile(File(file))
-                intent.setData(uri)
+                var intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                var uri = Uri.fromFile(File(file))
+                intent.data = uri
                 sendBroadcast(intent)
                 lifecycleScope.launch(Dispatchers.Main) {
-                    GlideUtils.loadImage(this@MainActivity,file,adjustIv)
+                    GlideUtils.loadImage(this@MainActivity, file, adjustIv)
+                }
+                if (mImageReader.maxImages >= 10) {
+                    lifecycleScope.launch(Dispatchers.Main) {
+                        resetCamera()
+                    }
                 }
             }
         }, childHandler)
         var previewSurface = surfaceView.holder.surface
-        var targets = listOf(previewSurface,mImageReader.surface)
+        var targets = listOf(previewSurface, mImageReader.surface)
         mCameraDevice?.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) {
                 mCameraDevice?.apply {

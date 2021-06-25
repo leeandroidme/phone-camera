@@ -11,4 +11,5 @@
     <color name="color_take_operation_select">#E67E22</color>
     <color name="color_theme_color">@color/black</color>
     <color name="color_text">#e2FFFFFF</color>
+    <color name="color_take_half_transpant">#22000000</color>
 </resources>
