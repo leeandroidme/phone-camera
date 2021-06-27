@@ -1,10 +1,12 @@
 package com.newland.camera.utils
 
+import android.content.Context
 import android.graphics.Point
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.params.StreamConfigurationMap
+import android.util.Log
 import android.util.Size
 import android.view.Display
 import dalvik.annotation.TestTargetClass
@@ -18,7 +20,10 @@ import kotlin.math.min
  *
  */
 object CameraUtils {
-    val SIZE_1080P = Size(1080, 1920)
+    fun getCameraManager(context: Context): CameraManager {
+        return context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    }
+
     fun isSupportCamera(cameraManager: CameraManager): Boolean {
         var cameraIds = cameraManager.cameraIdList
         if (cameraIds.isEmpty()) return false
@@ -87,10 +92,11 @@ object CameraUtils {
         targetClass: Class<T>,
         format: Int? = null
     ): Size {
+        val scale = height.toFloat() / width.toFloat()
         val outPoint = Point()
         display.getRealSize(outPoint)
-        val maxWidth = min(min(outPoint.x, outPoint.y), SIZE_1080P.width)
-        val maxHeight = min(max(outPoint.x, outPoint.y), SIZE_1080P.height)
+        val maxWidth = max(outPoint.x, outPoint.y) + 500
+        val maxHeight = min(outPoint.x, outPoint.y) + 500
 
         val configurationMap = cameraManager.getCameraCharacteristics(cameraId)
             .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
@@ -103,11 +109,13 @@ object CameraUtils {
             if (format == null)
                 configurationMap.getOutputSizes(targetClass)
             else configurationMap.getOutputSizes(format)
-        return allSizes.sortedWith(compareBy {
-            it.width*it.height
-        }).reversed().first {
-            it.width <= maxWidth && it.height <= maxHeight
-        }
+        var filterSizes =
+            allSizes.filter { it.width <= maxWidth && it.height <= maxHeight }.sortedWith(
+                compareBy { it.width * it.height })
+        var sortSizes = filterSizes.sortedWith(compareBy {
+            abs((it.height.toFloat() / it.width.toFloat()) - scale)
+        })
+        return sortSizes.first { it.width >= width || it.height >= height } ?: filterSizes.last()
     }
 
 }

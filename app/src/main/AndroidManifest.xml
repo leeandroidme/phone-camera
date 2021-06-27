@@ -21,6 +21,9 @@
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait" />
+        <activity
+            android:name=".TakeActivity"
+            android:screenOrientation="portrait" />
     </application>
 
     <uses-feature android:name="android.hardware.location.gps" />

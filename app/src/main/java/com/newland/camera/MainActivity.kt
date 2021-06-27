@@ -4,6 +4,7 @@ import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,11 +13,9 @@ import android.graphics.ImageFormat
 import android.hardware.camera2.*
 import android.media.ImageReader
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
-import android.provider.MediaStore
 import android.util.Log
 import android.util.SparseIntArray
 import android.view.*
@@ -29,14 +28,12 @@ import androidx.core.app.ActivityCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.*
 import com.chad.library.adapter.base.BaseQuickAdapter
 import com.chad.library.adapter.base.listener.OnItemClickListener
 import com.newland.camera.beans.TakeOperation
 import com.newland.camera.common.TakeOptionConstant
 import com.newland.camera.manager.FileManager
-import com.newland.camera.utils.Camera2Utils
 import com.newland.camera.utils.CameraUtils
 import com.newland.camera.utils.GlideUtils
 import com.newland.camera.widget.CameraConstraintLayout
@@ -48,9 +45,12 @@ import com.newland.camera.widget.center.CenterRecyclerView
 import com.newland.ui.adapter.MenuAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.io.FileOutputStream
+import java.lang.RuntimeException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -93,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val mCameraManager: CameraManager by lazy { getSystemService(Context.CAMERA_SERVICE) as CameraManager }
+    private lateinit var mCameraManager: CameraManager
     var mCameraDevice: CameraDevice? = null
     lateinit var mCameraId: String
     var mCameraCaptureSession: CameraCaptureSession? = null
@@ -103,30 +103,44 @@ class MainActivity : AppCompatActivity() {
     private val childHandlerThread = HandlerThread("Cameraphone").apply {
         start()
     }
-    private val childHandler: Handler = Handler(childHandlerThread.looper)
-    private var isDisconnectedCamera = false
-    private var isResume = false
-    private var takeOperation: TakeOperation? = null
-    var mStateCallback = object : CameraDevice.StateCallback() {
-        override fun onOpened(cameraDevice: CameraDevice) {
-            mCameraDevice = cameraDevice
-            takePreview()
-        }
-
-        override fun onDisconnected(cameraDevice: CameraDevice) {
-            if (isResume) {
-                resetCamera()
+    private val onImageAvailableListener = object : ImageReader.OnImageAvailableListener {
+        override fun onImageAvailable(reader: ImageReader?) {
+            reader?.also { reader ->
+                var image = reader.acquireNextImage()
+                var buffer = image.planes[0].buffer
+                var bytes = buffer.remaining().let { ByteArray(it) }
+                buffer.get(bytes)
+                var file = FileManager.instance.getPicture("${System.currentTimeMillis()}.jpg")
+                var fos = FileOutputStream(file)
+                fos.write(bytes)
+                fos.flush()
+                fos.close()
+                var intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
+                var uri = Uri.fromFile(File(file))
+                intent.data = uri
+                sendBroadcast(intent)
+                lifecycleScope.launch(Dispatchers.Main) {
+                    GlideUtils.loadImage(this@MainActivity, file, adjustIv)
+                }
+                if (mImageReader.maxImages >= 3) {
+                    lifecycleScope.launch(Dispatchers.Main) {
+                        switchCaptureSession()
+                    }
+                }
             }
-        }
-
-        override fun onError(cameraDevice: CameraDevice, p1: Int) {
         }
 
     }
 
+    private val childHandler: Handler = Handler(childHandlerThread.looper)
+    private var isDisconnectedCamera = false
+    private var isResume = false
+    private var takeOperation: TakeOperation? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        mCameraManager = CameraUtils.getCameraManager(this)
+        mCameraId = CameraUtils.getFirstCameraIdFacing(mCameraManager)
         setContentView(R.layout.activity_main)
         initTakeOperationView()
         initSurfaceView()
@@ -183,7 +197,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         isResume = true
         if (isDisconnectedCamera) {
-            resetCamera()
+            switchCaptureSession()
         }
     }
 
@@ -194,30 +208,22 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        stopCamera()
         childHandlerThread?.apply {
             quitSafely()
             join()
         }
     }
 
-    private fun resetCamera() {
-        stopCamera()
-        initCamera()
-    }
-
-    private fun initCamera() {
-        mCameraId = CameraUtils.getFirstCameraIdFacing(mCameraManager)
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.CAMERA
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
-        mCameraManager.openCamera(mCameraId, mStateCallback, mMainHandler)
+    private fun switchCaptureSession() {
+        mCameraCaptureSession?.close()
+        mCameraCaptureSession = null
+        startPreview()
     }
 
     private fun stopCamera() {
+        mCameraCaptureSession?.close()
+        mCameraCaptureSession = null
         mCameraDevice?.apply {
             close()
             mCameraDevice = null
@@ -225,13 +231,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initSurfaceView() {
+        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder?) {
+                surfaceView.holder.setFixedSize(1920,1080)
+                surfaceView.post { initializeCamera() }
+            }
+
+            override fun surfaceChanged(
+                holder: SurfaceHolder?,
+                format: Int,
+                width: Int,
+                height: Int
+            ) = Unit
+
+            override fun surfaceDestroyed(holder: SurfaceHolder?) = Unit
+
+        })
         surfaceView.viewTreeObserver.addOnGlobalLayoutListener(object : OnGlobalLayoutListener {
             override fun onGlobalLayout() {
                 surfaceView.viewTreeObserver.removeOnGlobalLayoutListener(this)
                 adjustSurfaceView()
-                initCamera()
             }
         })
+    }
+
+    private fun initializeCamera1() = lifecycleScope.launch(Dispatchers.Main) {
+        mCameraDevice = openCamera(mCameraManager, mCameraId, childHandler)
+        startPreview()
     }
 
     private fun adjustSurfaceView() {
@@ -249,7 +275,7 @@ class MainActivity : AppCompatActivity() {
                     bottomLayout.setBackgroundResource(R.color.color_theme_color)
                 }
                 TakeOptionConstant.FULL -> {
-                    layoutParams.height = LayoutParams.MATCH_PARENT
+                    layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
                     topLayout.visibility = GONE
                     bottomLayout.setBackgroundResource(R.color.color_take_half_transpant)
                 }
@@ -277,7 +303,7 @@ class MainActivity : AppCompatActivity() {
                 if (option.flag != takeOperation?.flag) {
                     takeOperation = option
                     adjustSurfaceView()
-                    resetCamera()
+                    switchCaptureSession()
                 }
             }
         }
@@ -286,7 +312,7 @@ class MainActivity : AppCompatActivity() {
         indicatorTake.addItemDecoration(CenterItemDecoration())
         indicatorTake.adapter = adapter
         for (i in datas.indices) {
-            if (datas[i].flag == TakeOptionConstant.TAKE_PHOTO) {
+            if (datas[i].flag == TakeOptionConstant.FULL) {
                 takeOperation = datas[i]
                 indicatorTake.setInitPosition(i)
                 takePhotoBtn.type = takeOperation!!.flag
@@ -338,76 +364,115 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun takePreview() {
-        val size = CameraUtils.getOutputSize(
+    private fun startPreview() = lifecycleScope.launch(Dispatchers.Main) {
+        val size0 = CameraUtils.getOutputSize(
             surfaceView.display,
             mCameraManager,
             mCameraId,
-            surfaceView.measuredWidth,
-            surfaceView.measuredHeight,
+            surfaceView.height,
+            surfaceView.width,
             SurfaceHolder::class.java
         )
-        surfaceView.holder.setFixedSize(size.width, size.height)
-        val irSize = CameraUtils.getOutputSize(
-            surfaceView.display,
-            mCameraManager,
-            mCameraId,
-            surfaceView.measuredWidth,
-            surfaceView.measuredHeight,
-            ImageReader::class.java,
-            ImageFormat.JPEG
+//        surfaceView.holder.setFixedSize(size0.width,size0.height)
+        val size = mCameraManager.getCameraCharacteristics(mCameraId).get(
+            CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+        )!!
+            .getOutputSizes(ImageFormat.JPEG).maxByOrNull { it.height * it.width }!!
+        mImageReader = ImageReader.newInstance(
+            size.width, size.height, ImageFormat.JPEG, 3
         )
-        mImageReader =
-            ImageReader.newInstance(irSize.width, irSize.height, ImageFormat.JPEG, 10)
-        mImageReader.setOnImageAvailableListener({ reader ->
-            reader?.also { reader ->
-                var image = reader.acquireNextImage()
-                var buffer = image.planes[0].buffer
-                var bytes = buffer.remaining().let { ByteArray(it) }
-                buffer.get(bytes)
-                var file = FileManager.instance.getPicture("${System.currentTimeMillis()}.jpg")
-                var fos = FileOutputStream(file)
-                fos.write(bytes)
-                fos.flush()
-                fos.close()
-                var intent = Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE)
-                var uri = Uri.fromFile(File(file))
-                intent.data = uri
-                sendBroadcast(intent)
-                lifecycleScope.launch(Dispatchers.Main) {
-                    GlideUtils.loadImage(this@MainActivity, file, adjustIv)
-                }
-                if (mImageReader.maxImages >= 10) {
-                    lifecycleScope.launch(Dispatchers.Main) {
-                        resetCamera()
-                    }
-                }
+        mImageReader.setOnImageAvailableListener(onImageAvailableListener, childHandler)
+        val targets = listOf(surfaceView.holder.surface, mImageReader.surface)
+        mCameraDevice?.apply {
+            mCameraCaptureSession = createCaptureSession(this, targets, childHandler)
+            createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                captureRequest.addTarget(surfaceView.holder.surface)
+                captureRequest.set(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                )
+                captureRequest.set(
+                    CaptureRequest.CONTROL_AE_MODE,
+                    CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+                )
+                mCameraCaptureSession?.setRepeatingRequest(
+                    captureRequest.build(),
+                    null,
+                    childHandler
+                )
             }
-        }, childHandler)
-        var previewSurface = surfaceView.holder.surface
-        var targets = listOf(previewSurface, mImageReader.surface)
-        mCameraDevice?.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
+        }
+    }
+
+    private fun initializeCamera() = lifecycleScope.launch(Dispatchers.Main) {
+        mCameraDevice = openCamera(mCameraManager, mCameraId, childHandler)
+        val size = mCameraManager.getCameraCharacteristics(mCameraId).get(
+            CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
+        )!!
+            .getOutputSizes(ImageFormat.JPEG).maxByOrNull { it.height * it.width }!!
+        mImageReader = ImageReader.newInstance(
+            size.width, size.height, ImageFormat.JPEG, 3
+        )
+
+        // Creates list of Surfaces where the camera will output frames
+        val targets = listOf(surfaceView.holder.surface, mImageReader.surface)
+        mCameraCaptureSession = createCaptureSession(mCameraDevice!!, targets, childHandler)
+        val captureRequest =
+            mCameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)?.apply {
+                val rotation: Int = windowManager.defaultDisplay.rotation
+                set(CaptureRequest.JPEG_ORIENTATION, TakeActivity.ORIENTATIONS[rotation])
+                addTarget(surfaceView.holder.surface)
+            }!!
+        mCameraCaptureSession?.setRepeatingRequest(captureRequest.build(), null, childHandler)
+
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun openCamera(
+        cameraManager: CameraManager,
+        cameraId: String,
+        handler: Handler?
+    ): CameraDevice =
+        suspendCancellableCoroutine { cont ->
+            cameraManager.openCamera(
+                cameraId,
+                object : CameraDevice.StateCallback() {
+                    override fun onOpened(camera: CameraDevice) {
+                        cont.resume(camera)
+                    }
+
+                    override fun onDisconnected(camera: CameraDevice) {
+                        finish()
+                    }
+
+                    override fun onError(camera: CameraDevice, error: Int) {
+                        val exe = RuntimeException("camera device error")
+                        cont.resumeWithException(exe)
+                    }
+
+                }, handler
+            )
+        }
+
+    /**
+     * 創建capture session
+     */
+    private suspend fun createCaptureSession(
+        cameraDevice: CameraDevice,
+        targets: List<Surface>,
+        handler: Handler? = null
+    ): CameraCaptureSession = suspendCancellableCoroutine { cont ->
+        cameraDevice.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) {
-                mCameraDevice?.apply {
-                    mCameraCaptureSession = session
-                    val captureRequest = createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-                    captureRequest.addTarget(previewSurface)
-                    captureRequest.set(
-                        CaptureRequest.CONTROL_AF_MODE,
-                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
-                    )
-                    captureRequest.set(
-                        CaptureRequest.CONTROL_AE_MODE,
-                        CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
-                    )
-                    session.setRepeatingRequest(captureRequest.build(), null, childHandler)
-                }
+                cont.resume(session)
             }
 
             override fun onConfigureFailed(session: CameraCaptureSession) {
+                val exe = RuntimeException("camera capture session failed")
+                cont.resumeWithException(exe)
             }
 
-        }, childHandler)
-
+        }, handler)
     }
 }
