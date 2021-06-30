@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.ImageFormat
 import android.hardware.camera2.*
 import android.media.ImageReader
+import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -33,7 +34,7 @@ class TakeActivity : AppCompatActivity() {
             ORIENTATIONS.append(Surface.ROTATION_270, 180)
         }
     }
-    private val surfaceView: AutoFitSurfaceView by lazy { findViewById(R.id.surfaceView) }
+    private val surfaceView: GLSurfaceView by lazy { findViewById(R.id.surfaceView) }
     private val cameraManager: CameraManager by lazy { getSystemService(Context.CAMERA_SERVICE) as CameraManager }
     private val cameraId: String by lazy { cameraManager.cameraIdList[0] }
     private val characteristic: CameraCharacteristics by lazy {
@@ -51,8 +52,6 @@ class TakeActivity : AppCompatActivity() {
         setContentView(R.layout.activity_take)
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder?) {
-//                surfaceView.holder.setFixedSize(1920, 1080)
-                surfaceView.setAspectRatio(1920,1080)
                 surfaceView.post { initializeCamera() }
             }
 

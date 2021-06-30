@@ -103,8 +103,8 @@ class MainActivity : AppCompatActivity() {
     private val childHandlerThread = HandlerThread("Cameraphone").apply {
         start()
     }
-    private val onImageAvailableListener = object : ImageReader.OnImageAvailableListener {
-        override fun onImageAvailable(reader: ImageReader?) {
+    private val onImageAvailableListener =
+        ImageReader.OnImageAvailableListener { reader ->
             reader?.also { reader ->
                 var image = reader.acquireNextImage()
                 var buffer = image.planes[0].buffer
@@ -129,8 +129,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-
-    }
 
     private val childHandler: Handler = Handler(childHandlerThread.looper)
     private var isDisconnectedCamera = false
@@ -255,11 +253,6 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    private fun initializeCamera1() = lifecycleScope.launch(Dispatchers.Main) {
-        mCameraDevice = openCamera(mCameraManager, mCameraId, childHandler)
-        startPreview()
-    }
-
     private fun adjustSurfaceView() {
         takeOperation?.also {
             topLayout.visibility = VISIBLE
@@ -373,7 +366,7 @@ class MainActivity : AppCompatActivity() {
             surfaceView.width,
             SurfaceHolder::class.java
         )
-//        surfaceView.holder.setFixedSize(size0.width,size0.height)
+        surfaceView.holder.setFixedSize(size0.width,size0.height)
         val size = mCameraManager.getCameraCharacteristics(mCameraId).get(
             CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP
         )!!
