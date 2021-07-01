@@ -44,6 +44,7 @@ import com.newland.camera.widget.center.CenterLayoutManager
 import com.newland.camera.widget.center.CenterRecyclerView
 import com.newland.ui.adapter.MenuAdapter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
@@ -418,7 +419,6 @@ class MainActivity : AppCompatActivity() {
                 addTarget(surfaceView.holder.surface)
             }!!
         mCameraCaptureSession?.setRepeatingRequest(captureRequest.build(), null, childHandler)
-
     }
 
     @SuppressLint("MissingPermission")
