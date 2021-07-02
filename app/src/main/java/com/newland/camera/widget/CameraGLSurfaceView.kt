@@ -6,8 +6,10 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES20
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
+import android.telecom.Call
 import android.util.AttributeSet
 import com.newland.camera.camera.CameraDrawer
+import com.newland.camera.common.CameraRenderCallback
 import com.newland.opengl.utils.TextureUtils
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
@@ -15,8 +17,9 @@ import javax.microedition.khronos.opengles.GL10
 class CameraGLSurfaceView : GLSurfaceView, GLSurfaceView.Renderer,
     SurfaceTexture.OnFrameAvailableListener {
     private var mTextureId = -1
-    private lateinit var mSurfaceTexture: SurfaceTexture
+    lateinit var mSurfaceTexture: SurfaceTexture
     private lateinit var mCameraDraw: CameraDrawer
+    var cameraRenderCallback: CameraRenderCallback? = null
 
     constructor(context: Context?) : super(context)
     constructor(context: Context?, attrs: AttributeSet?) : super(context, attrs)
@@ -32,6 +35,7 @@ class CameraGLSurfaceView : GLSurfaceView, GLSurfaceView.Renderer,
         mSurfaceTexture = SurfaceTexture(mTextureId)
         mSurfaceTexture.setOnFrameAvailableListener(this)
         mCameraDraw = CameraDrawer()
+        cameraRenderCallback?.onSurfaceCreated(mSurfaceTexture)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {

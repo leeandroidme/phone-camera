@@ -38,7 +38,7 @@ class SplashActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        startActivity(MainActivity::class.java)
+        startActivity(TakeActivity::class.java)
         finish()
     }
 }

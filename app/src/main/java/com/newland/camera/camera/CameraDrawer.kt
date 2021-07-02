@@ -131,7 +131,7 @@ class CameraDrawer {
         GLES20.glDrawElements(
             GLES20.GL_TRIANGLE_FAN,
             VERTEX_ORDER.size,
-            GLES20.GL_UNSIGNED_BYTE,
+            GLES20.GL_UNSIGNED_SHORT,
             mDrawListBuffer
         )
         GLES20.glDisableVertexAttribArray(mPositionIndex)

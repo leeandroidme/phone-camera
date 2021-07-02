@@ -20,7 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.newland.camera.beans.exception.CameraConnectException
 import com.newland.camera.beans.exception.CameraStateException
 import com.newland.camera.beans.exception.CaptureStateException
-import com.newland.camera.camera.CameraProxy
+import com.newland.camera.utils.CameraUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -33,7 +33,7 @@ import kotlin.coroutines.resumeWithException
  * @data: 1/7/2021.
  *
  */
-class BaseCameraActivity:AppCompatActivity() {
+open class BaseCameraActivity : AppCompatActivity() {
     private lateinit var mCameraManager: CameraManager
     private var mCameraDevice: CameraDevice? = null
     lateinit var mCameraId: String
@@ -45,30 +45,27 @@ class BaseCameraActivity:AppCompatActivity() {
         start()
     }
     private val mBackgroundHandler: Handler = Handler(mBackgroundHandlerThread.looper)
-    private var mPreviewSurfaceTexture: SurfaceTexture? = null
     private var mPreviewSurface: Surface? = null
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_take)
-    }
 
     override fun onDestroy() {
         super.onDestroy()
         releaseCamera()
     }
-    private fun openCamera() = GlobalScope.launch(Dispatchers.Main) {
+
+    fun openCamera(surfaceTexture: SurfaceTexture) = GlobalScope.launch(Dispatchers.Main) {
         mCameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        mCameraId = CameraUtils.getFirstCameraIdFacing(mCameraManager)
         mCameraDevice = openCamera(mCameraManager, mCameraId, mBackgroundHandler)
-        val size = Size(1920,1080)
+        val size = Size(1920, 1080)
         mImageReader = ImageReader.newInstance(
             size.width, size.height, ImageFormat.JPEG, 3
         )
-        if (mPreviewSurfaceTexture != null && mPreviewSurface == null) { // use texture view
-            mPreviewSurfaceTexture!!.setDefaultBufferSize(
+        if (surfaceTexture != null && mPreviewSurface == null) { // use texture view
+            surfaceTexture!!.setDefaultBufferSize(
                 size.width,
                 size.height
             )
-            mPreviewSurface = Surface(mPreviewSurfaceTexture)
+            mPreviewSurface = Surface(surfaceTexture)
         }
         val targets = listOf(mPreviewSurface!!, mImageReader!!.surface)
         mCameraCaptureSession = createCaptureSession(mCameraDevice!!, targets, mBackgroundHandler)
